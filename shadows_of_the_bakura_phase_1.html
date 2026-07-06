@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shadows of the Bakura - Phase 1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: #000; overflow: hidden;
+            font-family: 'Share Tech Mono', monospace; user-select: none; color: #fff;
+        }
+        
+        #game-container { position: relative; width: 100%; height: 100%; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Cinematic Effects */
+        .scanlines {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 99;
+        }
+        
+        .vhs-glitch { animation: glitch 6s infinite; }
+        @keyframes glitch {
+            0% { transform: translate(0) }
+            1% { transform: translate(-2px, 1px) skewX(1deg) }
+            2% { transform: translate(0) }
+            98% { transform: translate(0) }
+            99% { transform: translate(2px, -1px) skewX(-1deg) }
+            100% { transform: translate(0) }
+        }
+
+        /* UI Animations */
+        #fade-overlay {
+            background-color: black;
+            opacity: 1;
+            transition: opacity 2s ease-in-out;
+            z-index: 100;
+        }
+        
+        .cursor-pointer { cursor: pointer; }
+
+        /* File Open Animation */
+        #file-animation {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            width: 400px; height: 500px; background: #e0d0b0;
+            border: 2px solid #8c7355; box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            color: #000; padding: 20px;
+            transition: all 1s cubic-bezier(0.25, 1, 0.5, 1);
+            opacity: 0; z-index: 50;
+        }
+        #file-animation.open { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        
+        .stamp {
+            color: red; border: 4px solid red; padding: 10px;
+            font-size: 2rem; font-weight: bold; transform: rotate(-15deg);
+            display: inline-block; margin-top: 20px;
+            opacity: 0.8; letter-spacing: 0.2em;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container" class="vhs-glitch">
+    <div id="canvas-container"></div>
+    <div class="ui-layer scanlines"></div>
+    <div id="fade-overlay" class="ui-layer pointer-events-auto"></div>
+
+    <!-- START PROMPT -->
+    <div id="ui-start" class="ui-layer pointer-events-auto flex flex-col items-center justify-center bg-black z-[110] transition-opacity duration-1000">
+        <h1 class="text-4xl text-white mb-8 tracking-[0.5em] font-bold opacity-70">SHADOWS OF THE BAKURA</h1>
+        <button id="btn-init" class="px-8 py-3 border border-white/30 text-white/70 hover:bg-white/10 hover:text-white transition-all tracking-widest uppercase">Begin Experience</button>
+        <p class="text-xs text-gray-600 mt-4">(Wear headphones for optimal audio)</p>
+    </div>
+
+    <!-- MENU INTERACTION OVERLAY -->
+    <div id="ui-interaction" class="ui-layer flex items-center justify-center z-40 hidden">
+        <div id="interaction-text" class="text-xl tracking-widest bg-black/80 px-4 py-2 border border-white/20 rounded opacity-0 transition-opacity"></div>
+    </div>
+
+    <!-- FILE ANIMATION -->
+    <div id="file-animation" class="font-serif">
+        <h2 class="text-2xl font-bold border-b-2 border-black/30 pb-2 mb-4">CLASSIFIED - OPERATION ECHELON</h2>
+        <p class="text-lg leading-relaxed text-black/80">TARGET: The Cult of Sear</p>
+        <p class="text-lg leading-relaxed text-black/80">LOCATION: Sector 7, Outer Forests</p>
+        <p class="text-lg leading-relaxed text-black/80">STATUS: Shyper and Bokuna confirmed captured.</p>
+        <p class="text-lg leading-relaxed text-black/80 mt-4">DIRECTIVE: Infiltrate the compound. Extract the targets. Neutralize heavily armed hostile presence.</p>
+        <div class="stamp mt-8">TOP SECRET</div>
+    </div>
+
+    <!-- CUTSCENE ENDING -->
+    <div id="ui-ending" class="ui-layer flex items-center justify-center bg-black hidden opacity-0 transition-opacity duration-[3000ms] z-50">
+        <h1 class="text-5xl text-white tracking-[0.4em] font-bold">TO BE CONTINUED...</h1>
+    </div>
+</div>
+
+<script>
+/**
+ * SHADOWS OF THE BAKURA - PHASE 1
+ * Core Engine: Architecture, Audio, Tweening, Rendering
+ */
+
+// --- STATE MANAGEMENT ---
+const STATE = { INIT: 0, MENU: 1, TRANSITION: 2, CUTSCENE: 3, END: 4 };
+let currentState = STATE.INIT;
+
+// --- AUDIO SYSTEM (Web Audio API - Procedural) ---
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let actx;
+
+const SFX = {
+    init: () => { if(!actx) actx = new AudioContext(); },
+    masterGain: null,
+    ambientLoop: null,
+    rainLoop: null,
+    
+    playNoise: (duration, vol=0.1, type='pink', lowpass=1000) => {
+        if(!actx) return;
+        const bufferSize = actx.sampleRate * duration;
+        const buffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let b0=0, b1=0, b2=0;
+        for(let i=0; i<bufferSize; i++) {
+            let white = Math.random() * 2 - 1;
+            if(type==='pink') {
+                b0 = 0.99886 * b0 + white * 0.0555179; b1 = 0.99332 * b1 + white * 0.0750759; b2 = 0.96900 * b2 + white * 0.1538520;
+                data[i] = (b0 + b1 + b2 + white * 0.5362) * 0.1;
+            } else if (type==='brown') {
+                b0 = (b0 + (0.02 * white)) / 1.02; data[i] = b0 * 3.5;
+            } else data[i] = white;
+        }
+        const noise = actx.createBufferSource(); noise.buffer = buffer;
+        const filter = actx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = lowpass;
+        const gain = actx.createGain(); gain.gain.setValueAtTime(vol, actx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + duration);
+        noise.connect(filter); filter.connect(gain); gain.connect(actx.destination);
+        noise.start();
+    },
+    
+    startRain: () => {
+        if(!actx || SFX.rainLoop) return;
+        const bufferSize = actx.sampleRate * 2;
+        const buffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let b0=0;
+        for(let i=0; i<bufferSize; i++) {
+            let white = Math.random() * 2 - 1;
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            data[i] = b0 * 0.1;
+        }
+        const noise = actx.createBufferSource(); noise.buffer = buffer; noise.loop = true;
+        const filter = actx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 800;
+        SFX.rainLoop = actx.createGain(); SFX.rainLoop.gain.value = 0.0; // Start silent, fade in
+        noise.connect(filter); filter.connect(SFX.rainLoop); SFX.rainLoop.connect(actx.destination);
+        noise.start();
+        SFX.rainLoop.gain.linearRampToValueAtTime(0.3, actx.currentTime + 3);
+    },
+    
+    thunder: () => {
+        if(!actx) return;
+        SFX.playNoise(4.0, 0.8, 'brown', 300);
+        setTimeout(() => SFX.playNoise(2.0, 0.4, 'pink', 800), 200);
+        
+        // Visual Lightning Effect
+        postShader.uniforms.lightning.value = 1.0;
+        if(currentState === STATE.MENU && pointLight) pointLight.intensity = 5;
+        if(currentState === STATE.CUTSCENE && lightningLight) lightningLight.intensity = 10;
+        
+        setTimeout(() => { 
+            postShader.uniforms.lightning.value = 0.0; 
+            if(currentState === STATE.MENU && pointLight) pointLight.intensity = 1;
+            if(currentState === STATE.CUTSCENE && lightningLight) lightningLight.intensity = 0;
+        }, 100);
+        setTimeout(() => { 
+            postShader.uniforms.lightning.value = 0.5;
+            if(currentState === STATE.CUTSCENE && lightningLight) lightningLight.intensity = 5;
+        }, 150);
+        setTimeout(() => { 
+            postShader.uniforms.lightning.value = 0.0;
+            if(currentState === STATE.CUTSCENE && lightningLight) lightningLight.intensity = 0;
+        }, 250);
+    },
+    
+    paperRustle: () => SFX.playNoise(0.5, 0.4, 'pink', 3000),
+    drone: () => {
+        if(!actx || SFX.ambientLoop) return;
+        const osc = actx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 40;
+        const lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.1;
+        const lfoGain = actx.createGain(); lfoGain.gain.value = 5;
+        lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+        SFX.ambientLoop = actx.createGain(); SFX.ambientLoop.gain.value = 0.1;
+        osc.connect(SFX.ambientLoop); SFX.ambientLoop.connect(actx.destination);
+        osc.start(); lfo.start();
+    }
+};
+
+// --- THREE.JS ENGINE SETUP ---
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x050508, 0.05);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+// --- POST-PROCESSING SHADER (Cinematic / Horror) ---
+const renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const orthoScene = new THREE.Scene();
+const postShader = {
+    uniforms: { 
+        tDiffuse: { value: null }, time: { value: 0.0 }, 
+        distortion: { value: 0.1 }, rgbShift: { value: 0.002 },
+        lightning: { value: 0.0 }
+    },
+    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position, 1.0); }`,
+    fragmentShader: `
+        uniform sampler2D tDiffuse; uniform float time; uniform float distortion; 
+        uniform float rgbShift; uniform float lightning; varying vec2 vUv;
+        float rand(vec2 co){ return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453); }
+        void main() {
+            vec2 uv = vUv; vec2 cc = uv - 0.5; float dist = dot(cc, cc);
+            uv = uv + cc * (dist * distortion);
+            if(uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+            
+            // Chromatic Aberration
+            vec2 offset = vec2(rgbShift * (1.0+sin(time*2.0)*0.5), 0.0);
+            float r = texture2D(tDiffuse, uv + offset).r;
+            float g = texture2D(tDiffuse, uv).g;
+            float b = texture2D(tDiffuse, uv - offset).b;
+            
+            // Film Grain
+            float noise = (rand(uv * time) - 0.5) * 0.1;
+            
+            vec3 color = vec3(r, g, b) + noise;
+            color *= smoothstep(0.9, 0.3, length(cc)); // Vignette
+            
+            // Lightning Flash Overlay
+            color = mix(color, vec3(0.9, 0.9, 1.0), lightning * 0.4);
+            
+            gl_FragColor = vec4(color, 1.0);
+        }
+    `
+};
+const postMaterial = new THREE.ShaderMaterial({ uniforms: postShader.uniforms, vertexShader: postShader.vertexShader, fragmentShader: postShader.fragmentShader });
+orthoScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMaterial));
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight); renderTarget.setSize(window.innerWidth, window.innerHeight);
+});
+
+// --- TWEEN ENGINE ---
+const Tweens = [];
+function addTween(obj, prop, target, duration, easing="easeOut", onComplete) {
+    Tweens.push({ obj, prop, start: obj[prop], target, duration, time: 0, easing, onComplete });
+}
+function updateTweens(dt) {
+    for(let i=Tweens.length-1; i>=0; i--) {
+        let t = Tweens[i]; t.time += dt; let p = Math.min(t.time / t.duration, 1.0);
+        if(t.easing === "easeOut") p = 1 - Math.pow(1 - p, 3);
+        if(t.easing === "easeInOut") p = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        t.obj[t.prop] = t.start + (t.target - t.start) * p;
+        if(p === 1.0) { if(t.onComplete) t.onComplete(); Tweens.splice(i, 1); }
+    }
+}
+
+// ============================================================================
+// SCENE 1: THE DETECTIVE OFFICE (MENU)
+// ============================================================================
+const menuScene = new THREE.Group();
+scene.add(menuScene);
+
+let interactables = [];
+let pointLight;
+let mouseX = 0, mouseY = 0;
+let fileMesh;
+
+function buildOffice() {
+    // Room Geometry
+    const roomGeo = new THREE.BoxGeometry(10, 6, 10);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1a20, roughness: 0.9, side: THREE.BackSide });
+    const room = new THREE.Mesh(roomGeo, wallMat);
+    room.position.y = 3;
+    menuScene.add(room);
+    
+    // Window
+    const windowMesh = new THREE.Mesh(new THREE.PlaneGeometry(3, 4), new THREE.MeshBasicMaterial({color: 0x050510}));
+    windowMesh.position.set(-4.9, 3, -1); windowMesh.rotation.y = Math.PI/2;
+    menuScene.add(windowMesh);
+
+    // Desk
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.8 });
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 2), deskMat);
+    desk.position.set(0, 1.5, -2); desk.castShadow = true; desk.receiveShadow = true;
+    menuScene.add(desk);
+    
+    const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), deskMat); leg1.position.set(-1.8, 0.75, -1.2); menuScene.add(leg1);
+    const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), deskMat); leg2.position.set(1.8, 0.75, -1.2); menuScene.add(leg2);
+    
+    // Desk Lamp
+    const lampGroup = new THREE.Group();
+    const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 16), new THREE.MeshStandardMaterial({color: 0x111111}));
+    const lampArm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8), new THREE.MeshStandardMaterial({color: 0x333333}));
+    lampArm.rotation.x = Math.PI/4; lampArm.position.set(0, 0.25, 0.2);
+    const lampHead = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.3, 16), new THREE.MeshStandardMaterial({color: 0x111111}));
+    lampHead.rotation.x = -Math.PI/4; lampHead.position.set(0, 0.5, 0.4);
+    lampGroup.add(lampBase, lampArm, lampHead);
+    lampGroup.position.set(-1.2, 1.6, -2.2);
+    menuScene.add(lampGroup);
+
+    // Lamp Light
+    pointLight = new THREE.PointLight(0xffa852, 1, 8);
+    pointLight.position.set(-1.2, 2.2, -1.8);
+    pointLight.castShadow = true;
+    pointLight.shadow.bias = -0.001;
+    menuScene.add(pointLight);
+
+    // Shadowking Silhouette
+    const skMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 1.0 });
+    const skBody = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 1.2, 16), skMat);
+    skBody.position.set(0, 1.6, -3.2);
+    const skHead = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), skMat);
+    skHead.position.set(0, 2.4, -3.2);
+    menuScene.add(skBody, skHead);
+
+    // INTERACTIVE: The Classified Folder
+    const folderGroup = new THREE.Group();
+    const folderBottom = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.01, 0.4), new THREE.MeshStandardMaterial({color: 0xe0d0b0}));
+    const folderTop = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.01, 0.38), new THREE.MeshStandardMaterial({color: 0xc0b090}));
+    folderTop.position.set(0.01, 0.01, 0); folderTop.rotation.z = -0.05; // Slightly open
+    folderGroup.add(folderBottom, folderTop);
+    folderGroup.position.set(0.3, 1.61, -1.8);
+    folderGroup.rotation.y = 0.2;
+    menuScene.add(folderGroup);
+    
+    // Hidden hit box for raycasting
+    fileMesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 0.5), new THREE.MeshBasicMaterial({visible:false}));
+    fileMesh.position.set(0.3, 1.65, -1.8); fileMesh.rotation.y = 0.2;
+    fileMesh.userData = { action: 'open_file', label: 'INSPECT CLASSIFIED FILE' };
+    menuScene.add(fileMesh);
+    interactables.push(fileMesh);
+
+    // Clutter (Gun, Mug)
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.15, 16), new THREE.MeshStandardMaterial({color: 0xffffff}));
+    mug.position.set(1.0, 1.68, -2.1); menuScene.add(mug);
+    
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.25), new THREE.MeshStandardMaterial({color: 0x222222}));
+    gun.position.set(0.8, 1.65, -1.5); gun.rotation.y = -0.4; menuScene.add(gun);
+
+    // Dust Particles
+    const dustGeo = new THREE.BufferGeometry();
+    const dustPos = new Float32Array(500 * 3);
+    for(let i=0; i<1500; i++) dustPos[i] = (Math.random() - 0.5) * 8;
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    const dustMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.02, transparent: true, opacity: 0.3});
+    const dust = new THREE.Points(dustGeo, dustMat);
+    dust.position.y = 3;
+    menuScene.add(dust);
+
+    // Initial Camera Setup
+    camera.position.set(0, 2.5, 2);
+    camera.lookAt(0, 1.5, -2);
+}
+
+// Mouse interaction for menu
+document.addEventListener('mousemove', (e) => {
+    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+    
+    if(currentState === STATE.MENU) {
+        // Parallax camera effect
+        camera.position.x = mouseX * 0.3;
+        camera.position.y = 2.5 + mouseY * 0.1;
+        camera.lookAt(0, 1.5, -2);
+
+        // Raycasting for interactions
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
+        const intersects = raycaster.intersectObjects(interactables);
+        
+        const uiText = document.getElementById('interaction-text');
+        if(intersects.length > 0) {
+            document.body.style.cursor = 'pointer';
+            document.getElementById('ui-interaction').classList.remove('hidden');
+            uiText.innerText = intersects[0].object.userData.label;
+            uiText.style.opacity = 1;
+        } else {
+            document.body.style.cursor = 'default';
+            uiText.style.opacity = 0;
+            setTimeout(()=> { if(document.body.style.cursor === 'default') document.getElementById('ui-interaction').classList.add('hidden'); }, 300);
+        }
+    }
+});
+
+document.addEventListener('mousedown', (e) => {
+    if(currentState === STATE.MENU) {
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
+        const intersects = raycaster.intersectObjects(interactables);
+        if(intersects.length > 0 && intersects[0].object.userData.action === 'open_file') {
+            transitionToCutscene();
+        }
+    }
+});
+
+function transitionToCutscene() {
+    currentState = STATE.TRANSITION;
+    document.body.style.cursor = 'default';
+    document.getElementById('ui-interaction').classList.add('hidden');
+    SFX.paperRustle();
+    
+    // Zoom in on file
+    addTween(camera.position, 'x', 0.3, 1, 'easeInOut');
+    addTween(camera.position, 'y', 2.0, 1, 'easeInOut');
+    addTween(camera.position, 'z', -1.0, 1, 'easeInOut');
+    
+    setTimeout(() => {
+        // Show HTML File Animation
+        const fileAnim = document.getElementById('file-animation');
+        fileAnim.classList.add('open');
+        
+        setTimeout(() => {
+            // Fade to black
+            document.getElementById('fade-overlay').style.opacity = '1';
+            
+            setTimeout(() => {
+                fileAnim.classList.remove('open');
+                menuScene.visible = false;
+                startCutscene();
+            }, 2000);
+        }, 3000);
+    }, 1000);
+}
+
+
+// ============================================================================
+// SCENE 2: THE BASE (CUTSCENE)
+// ============================================================================
+const cutsceneScene = new THREE.Group();
+cutsceneScene.visible = false;
+scene.add(cutsceneScene);
+
+let lightningLight;
+let spotlights = [];
+let rainSystem2;
+
+function buildCutscene() {
+    // Terrain
+    const groundGeo = new THREE.PlaneGeometry(500, 500);
+    const groundMat = new THREE.MeshStandardMaterial({color: 0x050805, roughness: 1.0});
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI/2;
+    cutsceneScene.add(ground);
+
+    // Dense Forest (InstancedMesh for performance)
+    const treeGeo = new THREE.ConeGeometry(2, 10, 5);
+    const treeMat = new THREE.MeshStandardMaterial({color: 0x0a140a, roughness: 0.9});
+    const treeInstanced = new THREE.InstancedMesh(treeGeo, treeMat, 1000);
+    const dummy = new THREE.Object3D();
+    let treeCount = 0;
+    for(let i=0; i<1000; i++) {
+        let tx = (Math.random()-0.5) * 300;
+        let tz = (Math.random()-0.5) * 300;
+        // Leave a clearing for the base
+        if (Math.abs(tx) < 60 && tz < 10 && tz > -100) continue; 
+        
+        dummy.position.set(tx, 5, tz);
+        dummy.scale.set(1 + Math.random(), 1 + Math.random(), 1 + Math.random());
+        dummy.rotation.y = Math.random() * Math.PI;
+        dummy.updateMatrix();
+        treeInstanced.setMatrixAt(treeCount++, dummy.matrix);
+    }
+    treeInstanced.count = treeCount;
+    cutsceneScene.add(treeInstanced);
+
+    // The Base Compound
+    const baseGroup = new THREE.Group();
+    baseGroup.position.set(0, 0, -50);
+    cutsceneScene.add(baseGroup);
+
+    // Perimeter Wall
+    const wallGeo = new THREE.BoxGeometry(100, 15, 2);
+    const wallMat = new THREE.MeshStandardMaterial({color: 0x222222});
+    const frontWall = new THREE.Mesh(wallGeo, wallMat);
+    frontWall.position.set(0, 7.5, 0);
+    baseGroup.add(frontWall);
+
+    // Watchtowers
+    const buildTower = (x, z) => {
+        const twr = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(2, 3, 25, 8), new THREE.MeshStandardMaterial({color: 0x333333}));
+        body.position.y = 12.5; twr.add(body);
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 6), new THREE.MeshStandardMaterial({color: 0x111111}));
+        cabin.position.y = 27; twr.add(cabin);
+        
+        // Spotlight Simulation (Volumetric cone)
+        const sLight = new THREE.SpotLight(0xffffff, 5, 100, Math.PI/6, 0.5, 2);
+        sLight.position.set(0, 27, 3);
+        const sTarget = new THREE.Object3D();
+        sTarget.position.set(0, 0, 30);
+        twr.add(sLight); twr.add(sTarget); sLight.target = sTarget;
+        
+        // Volumetric beam illusion
+        const beamMat = new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, side: THREE.DoubleSide});
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 15, 50, 16, 1, true), beamMat);
+        beam.rotation.x = Math.PI/2;
+        beam.position.set(0, 27, 25);
+        twr.add(beam);
+
+        twr.position.set(x, 0, z);
+        baseGroup.add(twr);
+        spotlights.push({ target: sTarget, beam: beam, xOffset: x, phase: Math.random()*Math.PI*2 });
+    };
+    buildTower(-40, 2); buildTower(40, 2);
+
+    // Main Gate
+    const gateGeo = new THREE.BoxGeometry(20, 12, 3);
+    const gateMat = new THREE.MeshStandardMaterial({color: 0x111115});
+    const gate = new THREE.Mesh(gateGeo, gateMat);
+    gate.position.set(0, 6, 1);
+    baseGroup.add(gate);
+    
+    // Giant Cult Emblem on Gate
+    const emblem = new THREE.Mesh(new THREE.TorusGeometry(3, 0.5, 8, 16), new THREE.MeshStandardMaterial({color: 0x880000, emissive: 0x220000}));
+    emblem.position.set(0, 8, 3);
+    baseGroup.add(emblem);
+
+    // Base Buildings (Background)
+    for(let i=0; i<5; i++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(20+Math.random()*20, 10+Math.random()*30, 20+Math.random()*20), new THREE.MeshStandardMaterial({color: 0x151515}));
+        b.position.set((Math.random()-0.5)*60, 15, -20 - Math.random()*40);
+        baseGroup.add(b);
+    }
+
+    // Heavy Rain Particles
+    const rGeo = new THREE.BufferGeometry();
+    const rPos = new Float32Array(5000 * 3);
+    for(let i=0; i<15000; i+=3) {
+        rPos[i] = (Math.random() - 0.5) * 200;
+        rPos[i+1] = Math.random() * 100;
+        rPos[i+2] = (Math.random() - 0.5) * 200;
+    }
+    rGeo.setAttribute('position', new THREE.BufferAttribute(rPos, 3));
+    rainSystem2 = new THREE.Points(rGeo, new THREE.PointsMaterial({color: 0xaaaaaa, size: 0.2, transparent: true, opacity: 0.6}));
+    cutsceneScene.add(rainSystem2);
+
+    // General Lighting
+    const ambLight = new THREE.AmbientLight(0x020205, 1.0);
+    cutsceneScene.add(ambLight);
+    
+    lightningLight = new THREE.PointLight(0xaaccff, 0, 500);
+    lightningLight.position.set(0, 150, 0);
+    cutsceneScene.add(lightningLight);
+}
+
+function startCutscene() {
+    currentState = STATE.CUTSCENE;
+    cutsceneScene.visible = true;
+    scene.fog.color.setHex(0x020204);
+    scene.fog.density = 0.02; // Thicker fog for outdoor
+    
+    // Fade in
+    document.getElementById('fade-overlay').style.opacity = '0';
+    SFX.drone();
+
+    // Cinematic Sequence Scripting
+    
+    // Shot 1: Aerial over forest
+    camera.position.set(0, 80, 150);
+    camera.lookAt(0, 0, -50);
+    addTween(camera.position, 'z', 100, 7, 'linear');
+    addTween(camera.position, 'y', 60, 7, 'linear');
+    
+    setTimeout(() => SFX.thunder(), 2000);
+    
+    // Shot 2: Ground level approach
+    setTimeout(() => {
+        camera.position.set(0, 5, 80);
+        camera.lookAt(0, 10, -50);
+        addTween(camera.position, 'z', 40, 6, 'linear');
+    }, 7000);
+    
+    setTimeout(() => SFX.thunder(), 9500);
+
+    // Shot 3: Panning up the gate
+    setTimeout(() => {
+        camera.position.set(0, 2, 20);
+        let lookTarget = {y: 5};
+        camera.lookAt(0, lookTarget.y, -50);
+        
+        // Tween the lookAt target to pan up
+        addTween(lookTarget, 'y', 30, 6, 'easeInOut', null);
+        // Manual update loop for the lookAt tween during this specific phase
+        let panInterval = setInterval(()=> {
+            if(currentState !== STATE.CUTSCENE) clearInterval(panInterval);
+            camera.lookAt(0, lookTarget.y, -50);
+        }, 16);
+        
+        setTimeout(() => clearInterval(panInterval), 6000);
+    }, 13000);
+
+    // Ending Shot
+    setTimeout(() => {
+        SFX.thunder();
+        setTimeout(() => {
+            document.getElementById('fade-overlay').style.opacity = '1';
+            setTimeout(() => {
+                currentState = STATE.END;
+                document.getElementById('ui-ending').classList.remove('hidden');
+                setTimeout(() => document.getElementById('ui-ending').style.opacity = '1', 100);
+            }, 2000);
+        }, 300);
+    }, 18000);
+}
+
+// ============================================================================
+// INITIALIZATION & RENDER LOOP
+// ============================================================================
+buildOffice();
+buildCutscene();
+
+document.getElementById('btn-init').addEventListener('click', () => {
+    SFX.init();
+    SFX.startRain();
+    document.getElementById('ui-start').style.opacity = '0';
+    setTimeout(() => {
+        document.getElementById('ui-start').classList.add('hidden');
+        document.getElementById('fade-overlay').style.opacity = '0'; // fade in from black
+        currentState = STATE.MENU;
+    }, 1000);
+});
+
+const clock = new THREE.Clock(); 
+let time = 0;
+let thunderTimer = 0;
+
+function animate() {
+    requestAnimationFrame(animate);
+    let dt = Math.min(clock.getDelta(), 0.1); 
+    time += dt;
+    
+    updateTweens(dt);
+
+    if (currentState === STATE.CUTSCENE) {
+        // Random ambient thunder
+        thunderTimer += dt;
+        if(thunderTimer > 5 + Math.random()*8) {
+            SFX.thunder();
+            thunderTimer = 0;
+        }
+
+        // Move Spotlights
+        spotlights.forEach(spot => {
+            let targetX = spot.xOffset + Math.sin(time + spot.phase) * 30;
+            spot.target.position.set(targetX, 0, 20 + Math.cos(time + spot.phase)*10);
+            // Update beam geometry to follow target
+            spot.beam.lookAt(spot.target.position);
+        });
+
+        // Update heavy rain
+        if (rainSystem2) {
+            const positions = rainSystem2.geometry.attributes.position.array;
+            for(let i=1; i<positions.length; i+=3) {
+                positions[i] -= dt * 60; // fall speed
+                if(positions[i] < 0) positions[i] = 100;
+            }
+            rainSystem2.geometry.attributes.position.needsUpdate = true;
+        }
+    }
+
+    // Post-processing update
+    postShader.uniforms.time.value = time;
+    
+    renderer.setRenderTarget(renderTarget);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    postShader.uniforms.tDiffuse.value = renderTarget.texture;
+    renderer.render(orthoScene, orthoCamera);
+}
+
+animate();
+</script>
+</body>
+</html>
