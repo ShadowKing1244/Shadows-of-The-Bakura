@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>Shadows of the Bakura - Phase 2</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<link rel="stylesheet" href="game.css">
+
+</head>
+
+<body>
+
+<div id="game">
+
+    <div id="canvas"></div>
+
+
+    <!-- HORROR EFFECTS -->
+    <div id="vhs"></div>
+    <div id="fade"></div>
+
+
+    <!-- HUD -->
+
+    <div id="hud">
+
+        <div id="mission">
+            <h3>MISSION</h3>
+            <p>Infiltrate the Bakura Cult Base.</p>
+            <p>Locate Shyper.</p>
+            <p>Locate Bokuna.</p>
+            <p>Escape Alive.</p>
+        </div>
+
+
+        <div id="stats">
+
+            <div>
+                HEALTH:
+                <span id="health">
+                100
+                </span>
+            </div>
+
+
+            <div>
+                AMMO:
+                <span id="ammo">
+                12
+                </span>
+            </div>
+
+        </div>
+
+
+        <div id="crosshair">
+            +
+        </div>
+
+
+        <div id="interaction">
+            PRESS E TO INTERACT
+        </div>
+
+    </div>
+
+
+
+    <!-- MOBILE CONTROLS -->
+
+    <div id="mobile-controls">
+
+
+        <div id="dpad">
+
+            <button id="up">
+                ▲
+            </button>
+
+            <div>
+                <button id="left">
+                    ◀
+                </button>
+
+                <button id="down">
+                    ▼
+                </button>
+
+                <button id="right">
+                    ▶
+                </button>
+            </div>
+
+        </div>
+
+
+
+        <div id="actions">
+
+            <button id="jump">
+                JUMP
+            </button>
+
+            <button id="sprint">
+                RUN
+            </button>
+
+            <button id="flashlight">
+                LIGHT
+            </button>
+
+            <button id="interact">
+                USE
+            </button>
+
+        </div>
+
+
+    </div>
+
+
+</div>
+
+
+<script src="player.js"></script>
+<script src="enemy.js"></script>
+<script src="ai.js"></script>
+<script src="combat.js"></script>
+<script src="inventory.js"></script>
+<script src="dialogue.js"></script>
+<script src="interaction.js"></script>
+<script src="audio.js"></script>
+<script src="lighting.js"></script>
+<script src="save.js"></script>
+<script src="ui.js"></script>
+
+<script src="game.js"></script>
+
+
+</body>
+</html>
