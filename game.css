@@ -1,0 +1,484 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+* {
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+
+body, html {
+
+    width:100%;
+    height:100%;
+    overflow:hidden;
+
+    background:black;
+
+    color:white;
+
+    font-family:'Share Tech Mono', monospace;
+
+    user-select:none;
+    touch-action:none;
+}
+
+
+#game {
+
+    width:100%;
+    height:100%;
+
+    position:relative;
+
+}
+
+
+
+#canvas {
+
+    position:absolute;
+
+    width:100%;
+    height:100%;
+
+    top:0;
+    left:0;
+
+    z-index:1;
+
+}
+
+
+
+/* =========================
+   CINEMATIC EFFECTS
+========================= */
+
+
+#vhs {
+
+    position:absolute;
+
+    width:100%;
+    height:100%;
+
+    z-index:20;
+
+    pointer-events:none;
+
+
+    background:
+
+    linear-gradient(
+        rgba(255,255,255,0.02) 50%,
+        rgba(0,0,0,0.15) 50%
+    );
+
+
+    background-size:
+
+    100% 4px;
+
+
+    animation:vhsMove 0.2s infinite;
+
+}
+
+
+
+@keyframes vhsMove {
+
+
+    0% {
+
+        transform:translate(0);
+
+    }
+
+
+    50% {
+
+        transform:translate(-1px,1px);
+
+    }
+
+
+    100% {
+
+        transform:translate(0);
+
+    }
+
+}
+
+
+
+#fade {
+
+    position:absolute;
+
+    width:100%;
+    height:100%;
+
+    background:black;
+
+    z-index:50;
+
+
+    opacity:1;
+
+
+    transition:
+
+    opacity 3s ease;
+
+}
+
+
+
+
+
+/* =========================
+ HUD
+========================= */
+
+
+#hud {
+
+    position:absolute;
+
+    width:100%;
+    height:100%;
+
+
+    z-index:10;
+
+    pointer-events:none;
+
+}
+
+
+
+#mission {
+
+
+    position:absolute;
+
+    top:30px;
+
+    left:30px;
+
+
+    background:
+
+    rgba(0,0,0,.45);
+
+
+    padding:15px;
+
+
+    border-left:
+
+    3px solid white;
+
+
+    font-size:18px;
+
+
+    letter-spacing:2px;
+
+}
+
+
+
+#mission h3 {
+
+
+    font-size:22px;
+
+    margin-bottom:10px;
+
+}
+
+
+
+#stats {
+
+
+    position:absolute;
+
+    bottom:30px;
+
+    left:30px;
+
+
+    font-size:22px;
+
+
+    background:
+
+    rgba(0,0,0,.5);
+
+
+    padding:15px;
+
+
+}
+
+
+
+#crosshair {
+
+
+    position:absolute;
+
+    top:50%;
+    left:50%;
+
+
+    transform:
+
+    translate(-50%,-50%);
+
+
+    font-size:32px;
+
+
+    opacity:.7;
+
+}
+
+
+
+
+
+#interaction {
+
+
+    position:absolute;
+
+    bottom:20%;
+
+    left:50%;
+
+
+    transform:
+
+    translateX(-50%);
+
+
+    padding:10px 25px;
+
+
+    background:
+
+    rgba(0,0,0,.7);
+
+
+    border:
+
+    1px solid white;
+
+
+    opacity:0;
+
+
+    transition:.3s;
+
+}
+
+
+
+
+
+
+
+/* =========================
+ MOBILE CONTROLS
+========================= */
+
+
+#mobile-controls {
+
+
+    position:absolute;
+
+
+    width:100%;
+    height:100%;
+
+
+    z-index:30;
+
+
+    pointer-events:none;
+
+
+}
+
+
+
+#dpad {
+
+
+    position:absolute;
+
+
+    bottom:40px;
+
+    left:40px;
+
+
+    pointer-events:auto;
+
+}
+
+
+#dpad button {
+
+
+    width:65px;
+
+    height:65px;
+
+
+    margin:5px;
+
+
+    border-radius:50%;
+
+
+    border:
+
+    1px solid rgba(255,255,255,.5);
+
+
+    background:
+
+    rgba(0,0,0,.6);
+
+
+    color:white;
+
+
+    font-size:25px;
+
+
+}
+
+
+
+#dpad div {
+
+
+    display:flex;
+
+    justify-content:center;
+
+}
+
+
+
+
+
+#actions {
+
+
+    position:absolute;
+
+
+    right:40px;
+
+    bottom:40px;
+
+
+    display:flex;
+
+    flex-direction:column;
+
+
+    gap:15px;
+
+
+    pointer-events:auto;
+
+
+}
+
+
+
+#actions button {
+
+
+    width:90px;
+
+    height:55px;
+
+
+    background:
+
+    rgba(0,0,0,.65);
+
+
+    color:white;
+
+
+    border:
+
+    1px solid white;
+
+
+    font-family:inherit;
+
+
+}
+
+
+
+
+
+/* Hide touch controls on PC */
+
+
+@media (min-width:900px){
+
+
+    #mobile-controls {
+
+        display:none;
+
+    }
+
+}
+
+
+
+/* =========================
+ PERFORMANCE / ATMOSPHERE
+========================= */
+
+
+canvas {
+
+    display:block;
+
+}
+
+
+
+button {
+
+    cursor:pointer;
+
+}
+
+
+
+button:active {
+
+
+    transform:scale(.9);
+
+
+}
