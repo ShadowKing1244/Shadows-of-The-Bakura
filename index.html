@@ -612,7 +612,7 @@ function startCutscene() {
         setTimeout(() => clearInterval(panInterval), 6000);
     }, 13000);
 
-    // Ending Shot
+        // Ending Shot
     setTimeout(() => {
         SFX.thunder();
         setTimeout(() => {
@@ -620,7 +620,17 @@ function startCutscene() {
             setTimeout(() => {
                 currentState = STATE.END;
                 document.getElementById('ui-ending').classList.remove('hidden');
-                setTimeout(() => document.getElementById('ui-ending').style.opacity = '1', 100);
+
+                setTimeout(() => {
+                    document.getElementById('ui-ending').style.opacity = '1';
+
+                    // Redirect to Phase 2 after showing "TO BE CONTINUED..." for 3 seconds
+                    setTimeout(() => {
+                        window.location.href = 'game.html';
+                    }, 3000);
+
+                }, 100);
+
             }, 2000);
         }, 300);
     }, 18000);
